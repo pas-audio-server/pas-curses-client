@@ -27,3 +27,23 @@
 *.exe
 *.out
 *.app
+core
+fsmain
+
+# VI
+*.swp
+
+# Music formats
+*.wav
+*.mp3
+*.flac
+
+# SQLite
+*.db
+
+# Text files
+play*.txt
+
+# Generated proto files
+commands.pb.h
+commands.pb.cc
