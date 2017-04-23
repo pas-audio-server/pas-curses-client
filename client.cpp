@@ -44,6 +44,7 @@
 #include <time.h>
 #include <assert.h>
 #include <curses.h>
+#include <panel.h>
 
 #include "commands.pb.h"
 
@@ -65,7 +66,16 @@ WINDOW * top_window = nullptr;
 WINDOW * mid_left = nullptr;
 WINDOW * mid_right = nullptr;
 WINDOW * bottom_window = nullptr;
-WINDOW * instruction_window = nullptr;
+WINDOW * help_window = nullptr;
+
+PANEL * top_panel2 = nullptr;
+PANEL * mid_left_panel = nullptr;
+PANEL * mid_right_panel = nullptr;
+PANEL * bottom_panel2 = nullptr;
+PANEL * help_panel = nullptr;
+
+static vector<string> help_text;
+static int widest_help_line = 0;
 
 struct Track
 {
@@ -78,7 +88,6 @@ vector<Track> tracks;
 int index_of_first_visible_track = 0;
 int index_of_high_lighted_line = 0;
 int number_of_dacs = 0;
-int number_of_lines_of_instructions = 1;
 int left_width = 32;
 int right_width = 0;
 int scroll_height = 0;
@@ -86,17 +95,73 @@ int top_window_height = 3;
 
 inline int StartLineForBottomWindow()
 {
-	return LINES - (2 + number_of_dacs) - number_of_lines_of_instructions;
+	return LINES - (2 + number_of_dacs);
 }
 
 inline int MidWindowHeight()
 {
-	return LINES - number_of_dacs - 2 - top_window_height - number_of_lines_of_instructions;
+	return LINES - number_of_dacs - 2 - top_window_height;
 }
 
 void SIGHandler(int signal_number)
 {
 	keep_going = false;
+}
+
+void InitializeHelpText()
+{
+	vector<string> * v = &help_text;
+
+	v->push_back("+    next DAC");
+	v->push_back("-    previous DAC");
+	v->push_back("UP   scroll up");
+	v->push_back("DN   scroll down");
+	v->push_back("^B   screen up");
+	v->push_back("^F   screen down");
+	v->push_back("RET  queue");
+	v->push_back("^X   stop");
+	v->push_back("^N   next");
+	v->push_back("^P   pause");
+	v->push_back("^R   resume");
+	v->push_back("ESC  quit");
+	v->push_back("^H   this help");
+
+	for (auto it = v->begin(); it < v->end(); it++) {
+		if ((int) it->size() > widest_help_line)
+			widest_help_line = it->size();
+	}
+}
+
+void MakeHelpWindow(WINDOW * w, PANEL * p)
+{
+	if (help_text.size() == 0)
+		InitializeHelpText();
+
+	int width, height;
+	getmaxyx(w, height, width);
+	werase(w);
+	box(w, 0, 0);
+	wmove(w, 1, 1);
+	waddstr(w, "pas-curses-client help         any key to return");
+	wmove(w, 2, 1);
+	whline(w, ACS_HLINE, width - 2);
+
+	int lines_of_text = height - 4;
+	int columns_needed = (help_text.size() + lines_of_text - 1) / lines_of_text;
+
+	if (columns_needed > 2) {
+		wmove(w, height - 2, 1);
+		waddstr(w, "need a taller window");
+		return;
+	}
+
+	int counter = 0;
+	for (auto it = help_text.begin(); it < help_text.end(); it++, counter++) {
+		wmove(w, 3 + (counter % lines_of_text), 1 + (counter / lines_of_text) * width / 2);
+		waddstr(w, it->c_str());
+	}
+
+	hide_panel(p);
 }
 
 /*	InitializeNetworkConnection() - This function provides standard network
@@ -276,15 +341,16 @@ void FetchTracks()
 
 void CurrentDACInfo()
 {
+	string s = "DAC: " + to_string(current_dac_index);
+
 	werase(top_window);
 	wmove(top_window, 1, 2);
-	waddstr(top_window, "DAC Number: ");
-	string s = to_string(current_dac_index);
 	waddstr(top_window, s.c_str());
-	wmove(top_window, 1, 20);
+
+	wmove(top_window, 1, 10);
 	waddstr(top_window, "Name: ");
 	waddstr(top_window, dac_name.c_str());
-	wborder(top_window, 0,0,0,0,0,0,0,0);
+	box(top_window, 0, 0);
 }
 
 int FindNumberOfDACs()
@@ -402,9 +468,9 @@ void DisplayTracks()
 
 void TrackCount()
 {
-	wmove(top_window, 1, COLS - COLS / 2);
-	waddstr(top_window, "Number of Tracks Available: ");
-	waddstr(top_window, to_string(tracks.size()).c_str());
+	string s = "Number of Tracks: " + to_string(tracks.size());
+	wmove(top_window, 1, COLS - s.size() - 1);
+	waddstr(top_window, s.c_str());
 }
 
 void DevCmdNoReply(Type type, int server_socket)
@@ -419,18 +485,16 @@ void DevCmdNoReply(Type type, int server_socket)
 	SendPB(s, server_socket);
 }
 
-void UpdateAndRender()
+void UpdateAndRender(bool do_dac_info = false)
 {
-	DACInfoCommand();
+	if (do_dac_info)
+		DACInfoCommand();
 	CurrentDACInfo();
 	TrackCount();
 	DisplayTracks();
 	wmove(top_window, 1, 1);
-	wrefresh(instruction_window);
-	wrefresh(top_window);
-	wrefresh(bottom_window);
-	wrefresh(mid_left);
-	wrefresh(mid_right);
+	update_panels();
+	doupdate();
 }
 
 inline void ChangeCurrentDAC(int offset)
@@ -448,20 +512,16 @@ void ChangeHighlightedLine(int offset)
 	{
 		index_of_high_lighted_line = 0;
 		index_of_first_visible_track--;
-		if (index_of_first_visible_track < 0)
-			index_of_first_visible_track = (int) tracks.size() - 1;
 	}
 	else if (offset > 0 && index_of_high_lighted_line >= scroll_height - 3 )
 	{
 		index_of_high_lighted_line = scroll_height - 3;
 		index_of_first_visible_track++;
-		if (index_of_first_visible_track >= (int) tracks.size())
-			index_of_first_visible_track = 0;
 	}
 	else {
 		// Impossible else.
 	}
-
+	index_of_first_visible_track = (index_of_first_visible_track + tracks.size()) % tracks.size();
 }
 
 void Play()
@@ -482,6 +542,20 @@ void Play()
 
 }		
 
+void ScrollByScreen(int offset)
+{
+	index_of_first_visible_track += offset * (scroll_height - 2);
+	index_of_first_visible_track = (index_of_first_visible_track + tracks.size()) % tracks.size();
+}
+
+void ShowHelp()
+{
+	show_panel(help_panel);
+	update_panels();
+	doupdate();
+	getch();
+	hide_panel(help_panel);
+}
 
 int main(int argc, char * argv[])
 {
@@ -513,7 +587,17 @@ int main(int argc, char * argv[])
 	mid_left = newwin(scroll_height, left_width, top_window_height, 0);
 	mid_right = newwin(scroll_height, right_width, top_window_height, left_width);
 	bottom_window = newwin(2 + number_of_dacs, COLS, StartLineForBottomWindow(), 0);
-	instruction_window = newwin(number_of_lines_of_instructions, COLS, LINES - number_of_lines_of_instructions, 0);
+
+	help_window = newwin(12, 50, 0, 0);
+	help_panel = new_panel(help_window);
+	move_panel(help_panel, 1, 2);
+
+	top_panel2 = new_panel(top_window);
+	mid_left_panel = new_panel(mid_left);
+	mid_right_panel = new_panel(mid_right);
+	bottom_panel2 = new_panel(bottom_window);
+
+	MakeHelpWindow(help_window, help_panel);
 
 	nodelay(top_window, 1);
 	keypad(top_window, 1);
@@ -524,23 +608,28 @@ int main(int argc, char * argv[])
 	string e_string;
 	time_t last_update = time(nullptr);
 
+	wborder(top_window, 0, 0, 0, 0, 0, 0, 0, 0);
+	wborder(bottom_window, 0, 0, 0, 0, 0, 0, 0, 0);
+	wborder(mid_left, 0, 0, 0, 0, 0, 0, 0, 0);
+	wborder(mid_right, 0, 0, 0, 0, 0, 0, 0, 0);
+
 	try
 	{
-		wborder(top_window, 0, 0, 0, 0, 0, 0, 0, 0);
-		wborder(bottom_window, 0, 0, 0, 0, 0, 0, 0, 0);
-		wborder(mid_left, 0, 0, 0, 0, 0, 0, 0, 0);
-		wborder(mid_right, 0, 0, 0, 0, 0, 0, 0, 0);
 
+/*
 		wmove(instruction_window, 0, 0);
 		wattron(instruction_window, A_STANDOUT);
 		waddstr(instruction_window, "-/D- +/D+ <RET>/Q ^X/STP ^P/PSE ^R/RSM ^N/NXT ^L/CLR A-Z  UP/T- DN/T+ ^F/PG+ ^B/PG- ^C/ESC/EXIT");
 		wattroff(instruction_window, A_STANDOUT);
 		wmove(top_window, 0, 2);
+*/
 
 		string s;
 		while (keep_going && curses_is_active)
 		{
 			bool display_needs_update = false;
+			bool update_dac_info = false;
+
 			int c = wgetch(top_window);
 			if (c != ERR)
 			{
@@ -563,6 +652,26 @@ int main(int argc, char * argv[])
 						ChangeHighlightedLine(1);
 						break;
 
+					case 2:
+						// ^B
+						ScrollByScreen(-1);
+						break;
+
+					case 6:
+						// ^F
+						ScrollByScreen(1);
+						break;
+
+					case 8:
+						// ^H
+						ShowHelp();
+						break;
+
+					case 12:
+						// ^L 
+						DevCmdNoReply(CLEAR_DEVICE, server_socket);
+						break;
+
 					case 14:
 						// ^N
 						DevCmdNoReply(NEXT_DEVICE, server_socket);
@@ -573,10 +682,6 @@ int main(int argc, char * argv[])
 						DevCmdNoReply(PAUSE_DEVICE, server_socket);
 						break;
 
-					case 12:
-						// ^L 
-						DevCmdNoReply(CLEAR_DEVICE, server_socket);
-						break;
 
 					case 18:
 						// ^R
@@ -593,18 +698,6 @@ int main(int argc, char * argv[])
 						Play();
 						break;
 		
-					case 6:
-						// ^F
-						index_of_first_visible_track += (scroll_height - 2);
-						index_of_first_visible_track = index_of_first_visible_track % tracks.size();
-						break;
-
-					case 2:
-						// ^B
-						index_of_first_visible_track -= (scroll_height - 2);
-						if (index_of_first_visible_track < 0)
-							index_of_first_visible_track += tracks.size();
-						break;
 
 					case 27:
 						// ESC
@@ -625,10 +718,13 @@ int main(int argc, char * argv[])
 			if (!keep_going)
 				break;
 
-			// THESE ARE HAPPENING TOO FREQUENTLY.
-			if (display_needs_update || difftime(time(nullptr), last_update) > 0.2) {
-				UpdateAndRender();
+			if (difftime(time(nullptr), last_update) > 0.2) {
 				last_update = time(nullptr);
+				update_dac_info = true;
+			}
+
+			if (display_needs_update || update_dac_info) {
+				UpdateAndRender(update_dac_info);
 			}
 			usleep(1000);
 		}
