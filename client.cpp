@@ -448,20 +448,16 @@ void ChangeHighlightedLine(int offset)
 	{
 		index_of_high_lighted_line = 0;
 		index_of_first_visible_track--;
-		if (index_of_first_visible_track < 0)
-			index_of_first_visible_track = (int) tracks.size() - 1;
 	}
 	else if (offset > 0 && index_of_high_lighted_line >= scroll_height - 3 )
 	{
 		index_of_high_lighted_line = scroll_height - 3;
 		index_of_first_visible_track++;
-		if (index_of_first_visible_track >= (int) tracks.size())
-			index_of_first_visible_track = 0;
 	}
 	else {
 		// Impossible else.
 	}
-
+	index_of_first_visible_track = (index_of_first_visible_track + tracks.size()) % tracks.size();
 }
 
 void Play()
@@ -482,6 +478,11 @@ void Play()
 
 }		
 
+void ScrollByScreen(int offset)
+{
+	index_of_first_visible_track += offset * (scroll_height - 2);
+	index_of_first_visible_track = (index_of_first_visible_track + tracks.size()) % tracks.size();
+}
 
 int main(int argc, char * argv[])
 {
@@ -563,6 +564,21 @@ int main(int argc, char * argv[])
 						ChangeHighlightedLine(1);
 						break;
 
+					case 6:
+						// ^F
+						ScrollByScreen(1);
+						break;
+
+					case 2:
+						// ^B
+						ScrollByScreen(-1);
+						break;
+
+					case 12:
+						// ^L 
+						DevCmdNoReply(CLEAR_DEVICE, server_socket);
+						break;
+
 					case 14:
 						// ^N
 						DevCmdNoReply(NEXT_DEVICE, server_socket);
@@ -573,10 +589,6 @@ int main(int argc, char * argv[])
 						DevCmdNoReply(PAUSE_DEVICE, server_socket);
 						break;
 
-					case 12:
-						// ^L 
-						DevCmdNoReply(CLEAR_DEVICE, server_socket);
-						break;
 
 					case 18:
 						// ^R
@@ -593,18 +605,6 @@ int main(int argc, char * argv[])
 						Play();
 						break;
 		
-					case 6:
-						// ^F
-						index_of_first_visible_track += (scroll_height - 2);
-						index_of_first_visible_track = index_of_first_visible_track % tracks.size();
-						break;
-
-					case 2:
-						// ^B
-						index_of_first_visible_track -= (scroll_height - 2);
-						if (index_of_first_visible_track < 0)
-							index_of_first_visible_track += tracks.size();
-						break;
 
 					case 27:
 						// ESC
