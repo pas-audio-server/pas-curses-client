@@ -43,20 +43,33 @@
 #include <unordered_set>
 #include <time.h>
 #include <assert.h>
-#include <curses.h>
-#include <panel.h>
+#include <ncursesw/curses.h>
+#include <ncursesw/panel.h>
+#include <wchar.h>
 
 #include "commands.pb.h"
 
 using namespace std;
 using namespace pas;
 
+/*
+// std::string -> std::wstring
+std::string s("string");
+std::wstring ws;
+ws.assign(s.begin(), s.end());
+
+// std::wstring -> std::string
+std::wstring ws(L"wstring");
+std::string s;
+s.assign(ws.begin(), ws.end());
+*/
+
 #define	LOG(s)		(string(__FILE__) + string(":") + string(__FUNCTION__) + string("() line: ") + to_string(__LINE__) + string(" msg: ") + string(s))
 
 map<char, int> jump_marks;
 
 int current_dac_index = 0;
-string dac_name;
+wstring dac_name;
 
 bool keep_going = true;
 bool curses_is_active = false;
@@ -74,14 +87,14 @@ PANEL * mid_right_panel = nullptr;
 PANEL * bottom_panel2 = nullptr;
 PANEL * help_panel = nullptr;
 
-static vector<string> help_text;
+static vector<wstring> help_text;
 static int widest_help_line = 0;
 
 struct Track
 {
-	string id;
-	string title;
-	string artist;
+	wstring id;
+	wstring title;
+	wstring artist;
 };
 
 vector<Track> tracks;
@@ -110,21 +123,21 @@ void SIGHandler(int signal_number)
 
 void InitializeHelpText()
 {
-	vector<string> * v = &help_text;
+	vector<wstring> * v = &help_text;
 
-	v->push_back("+    next DAC");
-	v->push_back("-    previous DAC");
-	v->push_back("UP   scroll up");
-	v->push_back("DN   scroll down");
-	v->push_back("^B   screen up");
-	v->push_back("^F   screen down");
-	v->push_back("RET  queue");
-	v->push_back("^X   stop");
-	v->push_back("^N   next");
-	v->push_back("^P   pause");
-	v->push_back("^R   resume");
-	v->push_back("ESC  quit");
-	v->push_back("^H   this help");
+	v->push_back((wchar_t *) "+    next DAC");
+	v->push_back((wchar_t *) "-    previous DAC");
+	v->push_back((wchar_t *) "UP   scroll up");
+	v->push_back((wchar_t *) "DN   scroll down");
+	v->push_back((wchar_t *) "^B   screen up");
+	v->push_back((wchar_t *) "^F   screen down");
+	v->push_back((wchar_t *) "RET  queue");
+	v->push_back((wchar_t *) "^X   stop");
+	v->push_back((wchar_t *) "^N   next");
+	v->push_back((wchar_t *) "^P   pause");
+	v->push_back((wchar_t *) "^R   resume");
+	v->push_back((wchar_t *) "ESC  quit");
+	v->push_back((wchar_t *) "^H   this help");
 
 	for (auto it = v->begin(); it < v->end(); it++) {
 		if ((int) it->size() > widest_help_line)
@@ -142,7 +155,7 @@ void MakeHelpWindow(WINDOW * w, PANEL * p)
 	werase(w);
 	box(w, 0, 0);
 	wmove(w, 1, 1);
-	waddstr(w, "pas-curses-client help         any key to return");
+	waddwstr(w, (wchar_t *) "pas-curses-client help         any key to return");
 	wmove(w, 2, 1);
 	whline(w, ACS_HLINE, width - 2);
 
@@ -151,14 +164,14 @@ void MakeHelpWindow(WINDOW * w, PANEL * p)
 
 	if (columns_needed > 2) {
 		wmove(w, height - 2, 1);
-		waddstr(w, "need a taller window");
+		waddwstr(w, (wchar_t *) "need a taller window");
 		return;
 	}
 
 	int counter = 0;
 	for (auto it = help_text.begin(); it < help_text.end(); it++, counter++) {
 		wmove(w, 3 + (counter % lines_of_text), 1 + (counter / lines_of_text) * width / 2);
-		waddstr(w, it->c_str());
+		waddwstr(w, it->c_str());
 	}
 
 	hide_panel(p);
@@ -282,6 +295,7 @@ string GetResponse(int server_socket, Type & type)
 	return s;
 }
 
+/*
 void Sanitize(string & s)
 {
 	for (auto it = s.begin(); it < s.end(); it++)
@@ -290,6 +304,7 @@ void Sanitize(string & s)
 			*it = '@';
 	}
 }
+*/
 
 void FetchTracks()
 {
@@ -320,20 +335,26 @@ void FetchTracks()
 			// r.results_size() tells how many are in map.
 			google::protobuf::Map<string, string> m = r.results();
 			Track t;
-			t.id = m["id"];
-			t.artist = m["artist"];
-			t.title = m["title"];
+			
+			t.id.assign(m["id"].begin(), m["id"].end());
+			t.artist.assign(m["artist"].begin(), m["artist"].end());
+			t.title.assign(m["title"].begin(), m["title"].end());
+
 			if (t.title.size() == 0)
 				continue;
+
 			if (t.artist.size() == 0)
 				continue;
+			
 			if (t.artist[0] != last_letter)
 			{
 				jump_marks[t.artist[0]] = (int) tracks.size();
 				last_letter = t.artist[0];
 			}
-			Sanitize(t.artist);
-			Sanitize(t.title);
+			
+			if (t.artist[0] == 'A' && t.artist[1] == '.')
+				wcout << t.artist << endl;
+
 			tracks.push_back(t);
 		}	
 	}
@@ -341,15 +362,20 @@ void FetchTracks()
 
 void CurrentDACInfo()
 {
-	string s = "DAC: " + to_string(current_dac_index);
+	string s = "DAC: ";
+	wstring ws;
+	ws.assign(s.begin(), s.end());
+	ws += to_wstring(current_dac_index);
 
 	werase(top_window);
-	wmove(top_window, 1, 2);
-	waddstr(top_window, s.c_str());
+	wmove(top_window, 1, 1);
+	waddwstr(top_window, ws.c_str());
 
+	s = "Name: ";
+	ws.assign(s.begin(), s.end());
 	wmove(top_window, 1, 10);
-	waddstr(top_window, "Name: ");
-	waddstr(top_window, dac_name.c_str());
+	waddwstr(top_window, ws.c_str());
+	waddwstr(top_window, dac_name.c_str());
 	box(top_window, 0, 0);
 }
 
@@ -396,27 +422,34 @@ void DACInfoCommand()
 		{
 			throw string("dacinfocomment parsefromstring failed");
 		}
+		wstring ws;
 		for (int i = 0; i < sr.row_size(); i++)
 		{
 			Row r = sr.row(i);
 			google::protobuf::Map<string, string> results = r.results();
 
-			if (i == current_dac_index)
-				dac_name = results[string("name")];
+			if (i == current_dac_index) {
+				dac_name.assign(results[string("name")].begin(), results[string("name")].end());
+			}
 			wmove(bottom_window, 1 + i, 1);
-			waddstr(bottom_window, results[string("index")].c_str());
+			ws.assign(results[string("index")].begin(), results[string("index")].end());
+			waddwstr(bottom_window, ws.c_str());
 			wmove(bottom_window, 1 + i, 5);
-			string g = results[string("who")];
-			if (g.size() > 32)
-				g.resize(32);
-			waddstr(bottom_window, g.c_str());
-			wmove(bottom_window, 1 + i, COLS / 2);
-			g = results[string("what")];
-			if (g.size() > 40)
-				g.resize(40);
-			waddstr(bottom_window, g.c_str());
+			ws.assign(results[string("who")].begin(), results[string("who")].end());			
+			if (ws.size() > 26)
+				ws.resize(26);
+			waddwstr(bottom_window, ws.c_str());
+			
+			wmove(bottom_window, 1 + i, 32);
+			ws.assign(results[string("what")].begin(), results[string("what")].end());
+			int maxw = COLS - 10 - 32;		
+			if (ws.size() > maxw)
+				ws.resize(maxw);
+			waddwstr(bottom_window, ws.c_str());
+
+			ws.assign(results[string("when")].begin(), results[string("when")].end());			
 			wmove(bottom_window, 1 + i, COLS - 9);
-			waddstr(bottom_window, results[string("when")].c_str());
+			waddwstr(bottom_window, ws.c_str());
 		}
 		wborder(bottom_window, 0, 0, 0, 0, 0, 0, 0, 0);
 	}
@@ -448,17 +481,19 @@ void DisplayTracks()
 			wattroff(mid_right, A_STANDOUT);
 		}
 
+		wstring s = tracks.at(index).artist;
+
 		wmove(mid_left, i + 1, 1);
-		string s = tracks.at(index).artist;
 		if ((int) s.size() > left_width - 2)
 			s.resize(left_width -2);
-		waddstr(mid_left, s.c_str());
+		waddwstr(mid_left, s.c_str());
+
+		s = tracks.at(index).title;
 
 		wmove(mid_right, i + 1, 1);
-		s = tracks.at(index).title;
 		if ((int) s.size() > right_width - 2)
 			s.resize(right_width -2);
-		waddstr(mid_right, s.c_str());
+		waddwstr(mid_right, s.c_str());
 	}
 	wattroff(mid_left, A_STANDOUT);
 	wattroff(mid_right, A_STANDOUT);
@@ -468,9 +503,12 @@ void DisplayTracks()
 
 void TrackCount()
 {
-	string s = "Number of Tracks: " + to_string(tracks.size());
-	wmove(top_window, 1, COLS - s.size() - 1);
-	waddstr(top_window, s.c_str());
+	string s = "Number of Tracks: ";
+	wstring ws;
+	ws.assign(s.begin(), s.end());
+	ws = ws + to_wstring(tracks.size());
+	wmove(top_window, 1, COLS - ws.size() - 1);
+	waddwstr(top_window, ws.c_str());
 }
 
 void DevCmdNoReply(Type type, int server_socket)
@@ -527,11 +565,14 @@ void ChangeHighlightedLine(int offset)
 void Play()
 {
 	string s;
+	wstring ws;
 	PlayTrackCommand cmd;
 
 	int index = index_of_high_lighted_line + index_of_first_visible_track;
 	index %= tracks.size();
-	int track = atoi(tracks.at(index).id.c_str());
+	ws = tracks.at(index).id;
+	s.assign(ws.begin(), ws.end());
+	int track = atoi(s.c_str());
 	cmd.set_type(PLAY_TRACK_DEVICE);
 	cmd.set_device_id(current_dac_index);
 	cmd.set_track_id(track);
@@ -559,6 +600,8 @@ void ShowHelp()
 
 int main(int argc, char * argv[])
 {
+	setlocale(LC_ALL,"");	
+	
 	if (signal(SIGINT, SIGHandler) == SIG_ERR)
 		throw LOG("");
 
@@ -619,7 +662,7 @@ int main(int argc, char * argv[])
 /*
 		wmove(instruction_window, 0, 0);
 		wattron(instruction_window, A_STANDOUT);
-		waddstr(instruction_window, "-/D- +/D+ <RET>/Q ^X/STP ^P/PSE ^R/RSM ^N/NXT ^L/CLR A-Z  UP/T- DN/T+ ^F/PG+ ^B/PG- ^C/ESC/EXIT");
+		waddwstr(instruction_window, "-/D- +/D+ <RET>/Q ^X/STP ^P/PSE ^R/RSM ^N/NXT ^L/CLR A-Z  UP/T- DN/T+ ^F/PG+ ^B/PG- ^C/ESC/EXIT");
 		wattroff(instruction_window, A_STANDOUT);
 		wmove(top_window, 0, 2);
 */
