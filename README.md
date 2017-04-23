@@ -10,4 +10,4 @@ Command line options are:
     -p    specify the pas server's port
           default to 5077
 
-The key sequences supported by the program are listed cryptically at the bottom of the screen.
+^H shows a help window.
