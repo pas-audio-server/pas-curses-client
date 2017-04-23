@@ -1,7 +1,7 @@
 # pas-curses-client
 A totally retro curses-based client for pas
 
-![Four DACS using DAC self-discovery](/screenshots/4dacs.png?raw=true "Four DACS")
+![Help window](/screenshots/new_help_window.png?raw=true "Four DACS")
 
 Command line options are:
 
