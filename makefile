@@ -1,6 +1,6 @@
 CC		= g++
-CFLAGS	= -g -Wall -std=c++11 -pthread
-LDFLAGS	= -lprotobuf -lcurses -lpanel
+CFLAGS	= -g -std=c++11 -pthread
+LDFLAGS	= -lprotobuf -lncursesw -lpanelw
 
 %.o				: %.cpp
 				$(CC) -c $(CFLAGS) $< -o $@
