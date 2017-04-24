@@ -1,5 +1,5 @@
 CC		= g++
-CFLAGS	= -g -std=c++11 -pthread
+CFLAGS	= -O3 -std=c++11 -pthread
 LDFLAGS	= -lprotobuf -lncursesw -lpanelw
 
 %.o				: %.cpp
@@ -9,10 +9,10 @@ LDFLAGS	= -lprotobuf -lncursesw -lpanelw
 				$(CC) -c $(CFLAGS) $< -o $@
 
 client.out		: client.o commands.pb.o
-				$(CC) client.o commands.pb.o $(LDFLAGS) -o $@
+				$(CC) -o $@ client.o commands.pb.o $(LDFLAGS)
 
 test.out		: test.o
-				$(CC) test.o $(LDFLAGS) -o $@
+				$(CC) -o $@ test.o $(LDFLAGS)
 
 clean			:
 				rm -f client.out *.o

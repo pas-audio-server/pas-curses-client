@@ -52,9 +52,11 @@
 using namespace std;
 using namespace pas;
 
+ofstream _log_;
+
 /*
 // std::string -> std::wstring
-std::string s("string");
+std::string s("string");of
 std::wstring ws;
 ws.assign(s.begin(), s.end());
 
@@ -63,6 +65,13 @@ std::wstring ws(L"wstring");
 std::string s;
 s.assign(ws.begin(), ws.end());
 */
+
+inline wstring S2W(string s)
+{
+	wstring ws;
+	ws.assign(s.begin(), s.end());
+	return ws;
+}
 
 #define	LOG(s)		(string(__FILE__) + string(":") + string(__FUNCTION__) + string("() line: ") + to_string(__LINE__) + string(" msg: ") + string(s))
 
@@ -125,19 +134,19 @@ void InitializeHelpText()
 {
 	vector<wstring> * v = &help_text;
 
-	v->push_back((wchar_t *) "+    next DAC");
-	v->push_back((wchar_t *) "-    previous DAC");
-	v->push_back((wchar_t *) "UP   scroll up");
-	v->push_back((wchar_t *) "DN   scroll down");
-	v->push_back((wchar_t *) "^B   screen up");
-	v->push_back((wchar_t *) "^F   screen down");
-	v->push_back((wchar_t *) "RET  queue");
-	v->push_back((wchar_t *) "^X   stop");
-	v->push_back((wchar_t *) "^N   next");
-	v->push_back((wchar_t *) "^P   pause");
-	v->push_back((wchar_t *) "^R   resume");
-	v->push_back((wchar_t *) "ESC  quit");
-	v->push_back((wchar_t *) "^H   this help");
+	v->push_back(L"+    next DAC");
+	v->push_back(L"-    previous DAC");
+	v->push_back(L"UP   scroll up");
+	v->push_back(L"DN   scroll down");
+	v->push_back(L"^B   screen up");
+	v->push_back(L"^F   screen down");
+	v->push_back(L"RET  queue");
+	v->push_back(L"^X   stop");
+	v->push_back(L"^N   next");
+	v->push_back(L"^P   pause");
+	v->push_back(L"^R   resume");
+	v->push_back(L"ESC  quit");
+	v->push_back(L"^H   this help");
 
 	for (auto it = v->begin(); it < v->end(); it++) {
 		if ((int) it->size() > widest_help_line)
@@ -155,7 +164,7 @@ void MakeHelpWindow(WINDOW * w, PANEL * p)
 	werase(w);
 	box(w, 0, 0);
 	wmove(w, 1, 1);
-	waddwstr(w, (wchar_t *) "pas-curses-client help         any key to return");
+	waddwstr(w, L"pas-curses-client help         any key to return");
 	wmove(w, 2, 1);
 	whline(w, ACS_HLINE, width - 2);
 
@@ -204,10 +213,14 @@ int InitializeNetworkConnection(int argc, char * argv[])
 	char * ip = (char *) ("127.0.0.1");
 	int opt;
 
-	while ((opt = getopt(argc, argv, "h:p:")) != -1) 
+	while ((opt = getopt(argc, argv, "dh:p:")) != -1) 
 	{
 		switch (opt) 
 		{
+			case 'd':
+				_log_.open("/tmp/curses_log.txt");
+				break;
+
 			case 'h':
 				ip = optarg;
 				break;
@@ -308,6 +321,10 @@ void Sanitize(string & s)
 
 void FetchTracks()
 {
+	// NOTE:
+	// NOTE: ADD A MORE SOPHISTICATED SELECT_QUERY THAT TAKES AN ORDER STRING
+	// NOTE:
+
 	string s;
 	SelectQuery c;
 	c.set_type(SELECT_QUERY);
@@ -336,9 +353,9 @@ void FetchTracks()
 			google::protobuf::Map<string, string> m = r.results();
 			Track t;
 			
-			t.id.assign(m["id"].begin(), m["id"].end());
-			t.artist.assign(m["artist"].begin(), m["artist"].end());
-			t.title.assign(m["title"].begin(), m["title"].end());
+			t.id = S2W(m["id"]);
+			t.artist = S2W(m["artist"]);
+			t.title = S2W(m["title"]);
 
 			if (t.title.size() == 0)
 				continue;
@@ -352,8 +369,8 @@ void FetchTracks()
 				last_letter = t.artist[0];
 			}
 			
-			if (t.artist[0] == 'A' && t.artist[1] == '.')
-				wcout << t.artist << endl;
+//			if (t.artist[0] == 'A' && t.artist[1] == '.')
+//				wcout << t.artist << endl;
 
 			tracks.push_back(t);
 		}	
@@ -413,7 +430,14 @@ void DACInfoCommand()
 
 	SendPB(s, server_socket);
 	Type type;
-	s = GetResponse(server_socket, type);
+	_log_ << __FUNCTION__ << " " << __LINE__ << " " << "before" << endl;
+	try {
+		s = GetResponse(server_socket, type);
+	}
+	catch (string s) {
+		return;
+	}
+	_log_ << __FUNCTION__ << " " << __LINE__ << " " << "after" << endl;
 	werase(bottom_window);
 	if (type == Type::SELECT_RESULT)
 	{
@@ -451,7 +475,7 @@ void DACInfoCommand()
 			wmove(bottom_window, 1 + i, COLS - 9);
 			waddwstr(bottom_window, ws.c_str());
 		}
-		wborder(bottom_window, 0, 0, 0, 0, 0, 0, 0, 0);
+		box(bottom_window, 0, 0);
 	}
 	else
 	{
@@ -463,6 +487,7 @@ void DisplayTracks()
 {
 	werase(mid_left);
 	werase(mid_right);
+
 	for (int i = 0; i < scroll_height - 2; i++)
 	{
 		int index = i + index_of_first_visible_track;
@@ -483,22 +508,23 @@ void DisplayTracks()
 
 		wstring s = tracks.at(index).artist;
 
-		wmove(mid_left, i + 1, 1);
+//		if (s[0] == 'A' && s[1] == '.')
+//			wcout << s << endl;
+
 		if ((int) s.size() > left_width - 2)
 			s.resize(left_width -2);
-		waddwstr(mid_left, s.c_str());
+		mvwaddwstr(mid_left, i + 1, 1, s.data());
 
 		s = tracks.at(index).title;
 
-		wmove(mid_right, i + 1, 1);
 		if ((int) s.size() > right_width - 2)
 			s.resize(right_width -2);
-		waddwstr(mid_right, s.c_str());
+		mvwaddwstr(mid_right, i + 1, 1, s.c_str());
 	}
 	wattroff(mid_left, A_STANDOUT);
 	wattroff(mid_right, A_STANDOUT);
-	wborder(mid_left, 0,0,0,0,0,0,0,0);
-	wborder(mid_right, 0,0,0,0,0,0,0,0);
+	box(mid_left, 0,0);
+	box(mid_right, 0,0);
 }
 
 void TrackCount()
@@ -525,6 +551,9 @@ void DevCmdNoReply(Type type, int server_socket)
 
 void UpdateAndRender(bool do_dac_info = false)
 {
+	right_width = COLS - left_width;
+	wresize(mid_right, scroll_height, right_width);
+
 	if (do_dac_info)
 		DACInfoCommand();
 	CurrentDACInfo();
@@ -600,7 +629,7 @@ void ShowHelp()
 
 int main(int argc, char * argv[])
 {
-	setlocale(LC_ALL,"");	
+	setlocale(LC_ALL,"");
 	
 	if (signal(SIGINT, SIGHandler) == SIG_ERR)
 		throw LOG("");
@@ -651,10 +680,10 @@ int main(int argc, char * argv[])
 	string e_string;
 	time_t last_update = time(nullptr);
 
-	wborder(top_window, 0, 0, 0, 0, 0, 0, 0, 0);
-	wborder(bottom_window, 0, 0, 0, 0, 0, 0, 0, 0);
-	wborder(mid_left, 0, 0, 0, 0, 0, 0, 0, 0);
-	wborder(mid_right, 0, 0, 0, 0, 0, 0, 0, 0);
+	box(top_window, 0, 0);
+	box(bottom_window, 0, 0);
+	box(mid_left, 0, 0);
+	box(mid_right, 0, 0);
 
 	try
 	{
@@ -788,6 +817,9 @@ int main(int argc, char * argv[])
 
 	if (e_string.size() > 0)
 		cout << e_string << endl;
+
+	if (_log_.is_open())
+		_log_.close();
 
 	return 0;
 }
