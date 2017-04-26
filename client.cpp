@@ -326,10 +326,11 @@ void FetchTracks()
 	// NOTE:
 
 	string s;
-	SelectQuery c;
-	c.set_type(SELECT_QUERY);
+	SelectQueryExpanded c;
+	c.set_type(SELECT_QUERY_EXPANDED);
 	c.set_column(string("artist"));
 	c.set_pattern(string("%"));
+	c.set_orderby(string("artist, album, disc, track * 1"));
 	bool outcome = c.SerializeToString(&s);
 	if (!outcome)
 		throw string("bad serialize");

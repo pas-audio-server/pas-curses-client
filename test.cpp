@@ -142,7 +142,7 @@ int main(int argc, char * argv[])
 	help_panel = new_panel(help_window);
 	wborder(help_window, 0, 0, 0, 0, 0, 0, 0, 0);
 
-	FillWindow(background_window, wchar_t('ö'));
+	FillWindow(background_window, L'ö');
 	MakeHelpWindow(help_window, help_panel);
 
 	move_panel(help_panel, 10, 10);
