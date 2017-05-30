@@ -455,8 +455,12 @@ void DACInfoCommand()
 
 			if (i == current_dac_index) {
 				dac_name.assign(results[string("friendly_name")].begin(), results[string("friendly_name")].end());
+				_log_ << __FUNCTION__ << " " << __LINE__ << endl;
 				if (dac_name.length() == 0)
+				{
 					dac_name.assign(results[string("name")].begin(), results[string("name")].end());
+					_log_ << __FUNCTION__ << " " << __LINE__ << endl;
+				}
 			}
 			wmove(bottom_window, 1 + i, 1);
 			ws.assign(results[string("index")].begin(), results[string("index")].end());
