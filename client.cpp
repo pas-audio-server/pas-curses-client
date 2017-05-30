@@ -454,7 +454,9 @@ void DACInfoCommand()
 			google::protobuf::Map<string, string> results = r.results();
 
 			if (i == current_dac_index) {
-				dac_name.assign(results[string("name")].begin(), results[string("name")].end());
+				dac_name.assign(results[string("friendly_name")].begin(), results[string("friendly_name")].end());
+				if (dac_name.length() == 0)
+					dac_name.assign(results[string("name")].begin(), results[string("name")].end());
 			}
 			wmove(bottom_window, 1 + i, 1);
 			ws.assign(results[string("index")].begin(), results[string("index")].end());
