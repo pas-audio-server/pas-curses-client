@@ -431,14 +431,14 @@ void DACInfoCommand()
 
 	SendPB(s, server_socket);
 	Type type;
-	_log_ << __FUNCTION__ << " " << __LINE__ << " " << "before" << endl;
+	//_log_ << __FUNCTION__ << " " << __LINE__ << " " << "before" << endl;
 	try {
 		s = GetResponse(server_socket, type);
 	}
 	catch (string s) {
 		return;
 	}
-	_log_ << __FUNCTION__ << " " << __LINE__ << " " << "after" << endl;
+	//_log_ << __FUNCTION__ << " " << __LINE__ << " " << "after" << endl;
 	werase(bottom_window);
 	if (type == Type::SELECT_RESULT)
 	{
@@ -455,11 +455,11 @@ void DACInfoCommand()
 
 			if (i == current_dac_index) {
 				dac_name.assign(results[string("friendly_name")].begin(), results[string("friendly_name")].end());
-				_log_ << __FUNCTION__ << " " << __LINE__ << endl;
+				//_log_ << __FUNCTION__ << " " << __LINE__ << endl;
 				if (dac_name.length() == 0)
 				{
 					dac_name.assign(results[string("name")].begin(), results[string("name")].end());
-					_log_ << __FUNCTION__ << " " << __LINE__ << endl;
+					//_log_ << __FUNCTION__ << " " << __LINE__ << endl;
 				}
 			}
 			wmove(bottom_window, 1 + i, 1);
@@ -586,15 +586,15 @@ void ChangeHighlightedLine(int offset)
 	{
 		index_of_high_lighted_line = 0;
 		index_of_first_visible_track--;
+		_log_ << __FUNCTION__ << " " << __LINE__ << " " << index_of_high_lighted_line << endl;
 	}
-	else if (offset > 0 && index_of_high_lighted_line >= scroll_height - 3 )
+	else if (offset > 0 && index_of_high_lighted_line > scroll_height - 3 )
 	{
 		index_of_high_lighted_line = scroll_height - 3;
 		index_of_first_visible_track++;
+		_log_ << __FUNCTION__ << " " << __LINE__ << " " << index_of_high_lighted_line << endl;
 	}
-	else {
-		// Impossible else.
-	}
+	_log_ << __FUNCTION__ << " " << __LINE__ << " " << scroll_height - 3 << " " << index_of_first_visible_track << " " << offset << " " << index_of_high_lighted_line << endl;
 	index_of_first_visible_track = (index_of_first_visible_track + tracks.size()) % tracks.size();
 }
 
